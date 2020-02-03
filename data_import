@@ -1,0 +1,50 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[4]:
+
+
+pip install pandas_datareader
+
+
+# In[5]:
+
+
+import datetime as dt
+import matplotlib.pyplot as plt
+from matplotlib import style
+import pandas as pd
+import pandas_datareader.data as web
+
+
+# In[6]:
+
+
+style.use('ggplot')
+
+
+# In[7]:
+
+
+start = dt.datetime(2016,1,1)
+end = dt.datetime(2019,12,31)
+
+
+# In[9]:
+
+
+df = web.DataReader('TSLA', 'yahoo',start, end)
+print(df.head(6))
+
+
+# In[10]:
+
+
+print(df.tail())
+
+
+# In[ ]:
+
+
+
+
