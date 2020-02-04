@@ -1,0 +1,161 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[4]:
+
+
+pip install pandas_datareader
+
+
+# In[3]:
+
+
+pip install mplfinance
+
+
+# In[4]:
+
+
+import matplotlib
+import matplotlib.dates as mdates
+import mplfinance as mpf
+
+
+# In[13]:
+
+
+
+import datetime as dt
+import matplotlib.pyplot as plt
+from matplotlib import style
+import pandas as pd
+import pandas_datareader.data as web
+from mplfinance.original_flavor import candlestick_ohlc
+
+
+# In[6]:
+
+
+style.use('ggplot')
+
+
+# In[7]:
+
+
+start = dt.datetime(2016,1,1)
+end = dt.datetime(2019,12,31)
+
+
+# In[9]:
+
+
+df = web.DataReader('TSLA', 'yahoo',start, end)
+print(df.head(6))
+
+
+# In[10]:
+
+
+print(df.tail())
+
+
+# In[13]:
+
+
+df.to_csv('kir.csv')
+
+
+# In[8]:
+
+
+df1 = pd.read_csv('kir.csv',parse_dates = True,  index_col = 0)
+
+
+# In[40]:
+
+
+print(df1.head())
+
+
+# In[47]:
+
+
+df1['Adj Close'].plot()
+plt.show()
+
+
+# In[49]:
+
+
+df1[['Open', 'High']].plot()
+
+
+# In[67]:
+
+
+df1['100ma'] = df['Adj Close'].rolling(window=100, min_periods = 0).mean()
+
+
+# In[68]:
+
+
+df1.head()
+
+
+# In[58]:
+
+
+df1.dropna(inplace= True)
+
+
+# In[59]:
+
+
+df1.head()
+
+
+# In[10]:
+
+
+df2 = pd.read_csv('kir.csv',parse_dates = True,  index_col = 0)
+ax1 = plt.subplot2grid((6,1), (0,0), rowspan = 5, colspan = 1)
+ax2 = plt.subplot2grid((6,1), (5,0), rowspan = 1, colspan = 1, sharex =ax1)
+
+
+# In[ ]:
+
+
+ax1.plot(df2.index, df['100ma'])
+ax1.plot(df2.index, df['Adj Close'])
+ax2.bar(df2.index, df['Volume'])
+
+
+# In[11]:
+
+
+df_resample = df2['Adj Close'].resample('10D').ohlc()
+df_volume = df2['Volume'].resample('10D').sum()
+df_resample.reset_index(inplace = True)
+
+
+# In[12]:
+
+
+df_resample['Date'] = df_resample['Date'].map(mdates.date2num)
+
+
+# In[16]:
+
+
+ax1 = plt.subplot2grid((6,1), (0,0), rowspan = 5, colspan = 1)
+ax2 = plt.subplot2grid((6,1), (5,0), rowspan = 1, colspan = 1, sharex =ax1)
+ax1.xaxis_date()
+candlestick_ohlc(ax1, df_resample.values,width = 2, colorup = 'g')
+ax2.fill_between(df_volume.index.map(mdates.date2num), df_volume.values, 0)
+
+
+# In[ ]:
+
+
+
+
