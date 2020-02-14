@@ -1,0 +1,197 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[163]:
+
+
+import numpy as np
+import pandas as pd
+import pickle
+from collections import Counter
+from sklearn import svm, neighbors
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import VotingClassifier, RandomForestClassifier
+import bs4 as bs
+import pickle
+import requests
+import datetime as dt
+import os
+import pandas as pd
+import numpy as np
+get_ipython().run_line_magic('matplotlib', 'notebook')
+import pandas_datareader.data as web
+import matplotlib.pyplot as plt
+from matplotlib import style
+import matplotlib
+
+
+# In[216]:
+
+
+option_trading_tickers = ['BCE','RCI', 'SJR', 'T', 'CJR', 'MG', 'TOY','QSR', 'GOOS', 'CTC', 'GIL', 'DOL', 'L', 'SAP', 'MFI', 'ENB', 'CNQ', 'SU', 'CVE','ECA', 'CPG', 'TRP', 'MEG', 'PPL', 'ALA', 'HSE','BTE', 'VET', 'ARX', 'MFC', 'TD', 'CM', 'RY', 'BNS', 'BMO', 'NA','SLF','LB', 'GWO', 'CWB', 'EFN','CIX','TRI','X', 'ACB', 'APHA', 'HEXO', 'CRON','BHC', 'NFI', 'BBD', 'AC', 'CNR', 'SNC','CP','CAS', 'TECK', 'ABX', 'AEM', 'HBM', 'KL', 'NTR', 'OR','BB', 'SHOP', 'GIB', 'OTEX', 'MAXR', 'CLS','USX', 'FTS', 'EMA', 'CPX', 'H']
+
+
+# In[217]:
+
+
+def get_data_from_yahoo(option_trading_tickers):
+    os.makedirs('stock_cad36')
+    start = dt.datetime(2019,1,1)
+    end = dt.datetime(2020,2,13)
+    for ticker in option_trading_tickers:
+        if not os.path.exists('stock_cad36/{}.csv'.format(ticker)):
+            try:
+                try:
+                    df = web.DataReader(ticker, 'yahoo', start, end)
+                    df.to_csv('stock_cad36/{}.csv'.format(ticker))
+                except KeyError:
+                    pass
+            except KeyError:
+                pass
+
+
+# In[218]:
+
+
+get_data_from_yahoo(option_trading_tickers)
+
+
+# In[219]:
+
+
+def compile_data():
+    
+    main_df = pd.DataFrame()
+    
+    for count, ticker in enumerate(option_trading_tickers):
+        try:
+            df = pd.read_csv("stock_cad36/{}.csv".format(ticker))
+            df.set_index('Date', inplace = True)
+            df.rename(columns = {"Adj Close": ticker}, inplace = True)
+            df.drop(['Open' , 'High', "Low", "Close", "Volume"], 1, inplace = True)
+        
+            if main_df.empty:
+                main_df = df
+            else:
+                main_df = main_df.join(df, how = "outer")
+            
+            if count % 10 ==0:
+                print(count)
+        except FileNotFoundError:
+            pass
+    print(main_df.head())
+    main_df.to_csv("cadjointclose")
+
+
+# In[220]:
+
+
+compile_data()
+
+
+# In[221]:
+
+
+def process_data_for_labels(ticker):
+    hm_days = 7
+    df = pd.read_csv('cadjointclose', index_col = 0)
+    tickers = df.columns.values.tolist()
+    df.fillna(0, inplace = True)
+    for i in range(1, hm_days+1):
+        df['{}_{}d'.format(ticker, i)] = (df[ticker].shift(-i) - df[ticker])/df[ticker]
+    df.fillna(0 , inplace = True)
+    return tickers, df
+
+
+# In[222]:
+
+
+process_data_for_labels('TD')
+
+
+# In[223]:
+
+
+def buy_sell_hold(*args):
+    cols = [c for c in args]
+    requirement = 0.02 
+    for col in cols:
+        if col>requirement:
+            return 1
+        if col< - requirement:
+            return -1
+    return 0
+
+    
+
+
+# In[224]:
+
+
+def extract_featuresets(ticker):
+    tickers, df = process_data_for_labels(ticker)
+    df['{}_target'.format(ticker)] = list(map(buy_sell_hold, 
+                                             df['{}_1d'.format(ticker)],
+                                             df['{}_2d'.format(ticker)],
+                                             df['{}_3d'.format(ticker)],
+                                             df['{}_4d'.format(ticker)],
+                                             df['{}_5d'.format(ticker)],
+                                             df['{}_6d'.format(ticker)],
+                                             df['{}_7d'.format(ticker)]))
+    vals = df['{}_target'.format(ticker)].values.tolist()
+    str_vals = [str(i) for i in vals]
+    print('Data spread:', Counter(str_vals))
+    df.fillna(0, inplace= True)
+    df = df.replace([np.inf, -np.inf], np.nan)
+    df.dropna(inplace = True)
+    
+    df_vals = df[[ticker for ticker in tickers]].pct_change()
+    df_vals = df_vals.replace([np.inf, -np.inf], 0)
+    df_vals.fillna(0, inplace = True)
+    X = df_vals.values
+    y = df['{}_target'.format(ticker)].values
+    
+    return X, y, df
+
+
+# In[225]:
+
+
+extract_featuresets('GOOS')
+
+
+# In[226]:
+
+
+def do_ml(ticker):
+    X,y,df  = extract_featuresets(ticker)
+    
+    X_train , X_test, y_train , y_test = train_test_split(X, y, test_size = 0.25)
+#    clf = neighbors.KNeighborsClassifier()
+    clf = VotingClassifier([('lsvc', svm.LinearSVC()), ('knn', neighbors.KNeighborsClassifier()), ('rfor', RandomForestClassifier())])
+    clf.fit(X_train, y_train)
+    confidence = clf.score(X_test, y_test)
+    predictions= clf.predict(X_test)
+    
+    print('predict spread:',Counter(predictions))
+    
+    return confidence
+
+
+# In[231]:
+
+
+for ticker in option_trading_tickers:
+    try:
+        print(ticker)
+        print(do_ml(ticker))
+    except KeyError:
+        pass
+    
+
+
+# In[ ]:
+
+
+
+
